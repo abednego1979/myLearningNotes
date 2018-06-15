@@ -1,0 +1,92 @@
+spark快速大数据分析
+
+安装在C:\spark目录
+运行pyspark: C:\spark\spark-1.6.0-bin-hadoop2.6\bin>pyspark
+
+第一个用例
+>>> lines = sc.textFile("C:\\spark\\spark-1.6.0-bin-hadoop2.6\\README.md")		#如果文件不在C:\spark\spark-1.6.0-bin-hadoop2.6\bin下面，那就用绝对路径吧
+>>> lines.count()
+95
+>>> lines.first()
+u'# Apache Spark'
+>>> pythonLines = lines.filter(lambda line: "Python" in line)			#筛选带"Python"的行
+>>> pythonLines
+PythonRDD[11] at RDD at PythonRDD.scala:43
+>>> pythonLines.first()
+u'high-level APIs in Scala, Java, Python, and R, and an optimized engine that'
+
+
+知识点；
+进入pyspark环境，这个环境已经自动的帮你创建了一个“SparkContext对象”：sc
+>>> sc
+<pyspark.context.SparkContext object at 0x025BF2F0>
+
+sc可以创建RDD（弹性分布式数据集），RDD的数据可以来源于文件，也可以来源于python对象（list，set等）
+
+如果要编写独立运行的python脚本，那么sc的创建要自己做：
+==
+from pyspark import SparkConf, SparkContext
+
+conf = SparkConf().setMaster("local").setAppName("My App")
+sc = SparkContext(conf = conf)
+#
+#...
+sc.stop()
+
+#
+
+==
+运行的时候要使用下面的方式运行独立脚本
+bin/spark-submit my_script.py
+
+
+以上是快速入门，详细的入门在http://spark.apache.org/docs/latest/quick-start.html
+
+
+RDD----1.创RDD建，2.转化已有RDD，3.调用RDD操作
+
+sc.textFile等方式创建RDD后，每次操作会重新计算，这就会每次读取数据到内存。如果要在多个行动操作中重用同一个 RDD，可以使用RDD.persist() 让 Spark 把这个 RDD 缓存下来。
+>>> pythonLines.persist()
+PythonRDD[11] at RDD at PythonRDD.scala:43
+>>> pythonLines.first()
+u'high-level APIs in Scala, Java, Python, and R, and an optimized engine that'
+>>> pythonLines.count()
+3
+
+创建RDD
+lines = sc.parallelize(["pandas", "i like pandas"])	或
+lines = sc.textFile("/path/to/README.md")
+
+
+转化操作
+
+
+行动操作
+>>> print "Input had " + str(lines.count()) + " concerning lines"
+>>> for line in lines.take(10):
+...     print line
+...
+>>>
+
+RDD还有一个collect()函数，可以用来获取整个 RDD 中的数据----不过一定要保证collect()的RDD的规模小到可以放进执行动作的计算机
+
+
+向Spark传递函数
+Spark 的大部分转化操作和一部分行动操作，都需要依赖用户传递的函数来计算。
+
+简单的函数可以用lambda
+word = rdd.filter(lambda s: "error" in s)
+
+map()	接收一个函数，把这个函数用于 RDD 中的每个元素，将函数的返回结果作为结果 RDD 中对应元素的值。
+filter()	接收一个函数，并将 RDD 中满足该函数的元素放入新的RDD 中返回。
+
+>>> nums = sc.parallelize([1, 2, 3, 4])
+>>> squared = nums.map(lambda x: x * x).collect()
+>>> for num in squared:
+...     print "%i " % (num)
+...
+1
+4
+9
+16
+>>>
