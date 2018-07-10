@@ -90,3 +90,191 @@ filter()	接收一个函数，并将 RDD 中满足该函数的元素放入新的
 9
 16
 >>>
+
+
+flatMap()		对每个输入元素生成多个输出元素.返回的不是一个元素，而是一个返回值序列的迭代器。
+>>> lines = sc.parallelize(["hello world", "hi"])
+>>> words = lines.flatMap(lambda line: line.split(" "))
+>>> words.first()
+'hello'
+>>> words.count()
+3
+>>>
+
+伪集合操作
+RDD.distinct()							混洗（值唯一化）
+RDD.union(otherRDD)					并集（如果原来的RDD有重复元素，union() 操作也会包含这些重复数据，即不会混洗）
+RDD.intersection(otherRDD)	交集（运行时会去掉所有重复的元素，会混洗）
+RDD.subtract(otherRDD)			返回只存在与RDD中而不存在于otherRDD的数据，会混洗
+
+
+RDD.cartesian(otherRDD)			笛卡儿积（RDD和otherRDD的元素组合）
+
+
+sample(withReplacement,fraction, [seed])			采样
+
+
+行动操作
+RDD.reduce(func)						它接收一个函数作为参数，这个函数要操作两个 RDD 的元素类型的数据并返回一个同样类型的新元素。
+	sum = rdd.reduce(lambda x, y: x + y)
+
+fold()
+		num=sc.parallelize([1,2,3,4],1)			分1组 [1,2,3,4]
+		num.fold(10,add)										result=10+(10+1+2+3+4)
+		
+		num=sc.parallelize([1,2,3,4],2)			分2组 [[1,2],[3,4]]
+		num.fold(10,add)										result=10+(10+1+2)+(10+3+4)
+		
+		
+		num=sc.parallelize([1,2,3,4],4)			分4组 [[1],[2],[3],[4]]
+		num.fold(10,add)										result=10+(10+1)+(10+2)+(10+3)+(10+4)
+		
+		
+		
+		
+aggregate()			聚合
+	
+nums=sc.parallelize([1,2,3,4,5,6,7,8,9],1)			分1组 [1,2,3,4]
+sumCount = nums.aggregate((0, 0),(lambda acc, value: (acc[0] + value, acc[1] + 1)),(lambda acc1, acc2: (acc1[0] + acc2[0], acc1[1] +acc2[1])))
+
+为了显示计算的过程，将lambda函数转化为一般函数：
+nums=sc.parallelize([1,2,3,4,5,6,7,8,9],1)
+def action1(x,y):
+	print ("action1:")
+	print ("x=", x, "y=",y)
+	print ((x[0]+y, x[1]+1))
+	return (x[0]+y, x[1]+1)
+
+def action2(x,y):
+	print ("action2:")
+	print ("x=", x, "y=",y)
+	print ((x[0]+y[0], x[1]+y[1]))
+	return (x[0]+y[0], x[1]+y[1])
+	
+sumCount = nums.aggregate((0, 0),action1,action2)
+输出：
+action1:											由于只分了一组，所以下面的9个action1都是这个分组内的动作
+('x=', (0, 0), 'y=', 1)
+(1, 1)
+action1:
+('x=', (1, 1), 'y=', 2)
+(3, 2)
+action1:
+('x=', (3, 2), 'y=', 3)
+(6, 3)
+action1:
+('x=', (6, 3), 'y=', 4)
+(10, 4)
+action1:
+('x=', (10, 4), 'y=', 5)
+(15, 5)
+action1:
+('x=', (15, 5), 'y=', 6)
+(21, 6)
+action1:
+('x=', (21, 6), 'y=', 7)
+(28, 7)
+action1:
+('x=', (28, 7), 'y=', 8)
+(36, 8)
+action1:
+('x=', (36, 8), 'y=', 9)
+(45, 9)
+action2:													分组内的操作结束以后，做组间的聚合，由于只有1个分组，那也没有什么组间了，之和init量聚合一次既可
+('x=', (0, 0), 'y=', (45, 9))
+(45, 9)
+
+
+如果分为3组呢
+nums=sc.parallelize([1,2,3,4,5,6,7,8,9],1)
+函数action1和action2不变
+sumCount = nums.aggregate((0, 0),action1,action2)
+输出：
+action1:										属于第3分组
+('x=', (0, 0), 'y=', 7)
+(7, 1)
+action1:										属于第3分组
+('x=', (7, 1), 'y=', 8)
+(15, 2)
+action1:										属于第3分组
+('x=', (15, 2), 'y=', 9)
+(24, 3)
+action1:										属于第2分组
+('x=', (0, 0), 'y=', 4)
+(4, 1)
+action1:										属于第2分组
+('x=', (4, 1), 'y=', 5)
+(9, 2)
+action1:										属于第2分组
+('x=', (9, 2), 'y=', 6)
+(15, 3)
+action1:										属于第1分组
+('x=', (0, 0), 'y=', 1)
+(1, 1)
+action1:										属于第1分组
+('x=', (1, 1), 'y=', 2)
+(3, 2)
+action1:										属于第1分组
+('x=', (3, 2), 'y=', 3)
+(6, 3)
+
+action2:										组间聚合，现在3组的数据是(6, 3)，(15, 3)，(24, 3)
+('x=', (0, 0), 'y=', (6, 3))		将第1组的聚合结果聚合
+(6, 3)
+action2:
+('x=', (6, 3), 'y=', (15, 3))		将第2组的聚合结果聚合
+(21, 6)
+action2:
+('x=', (21, 6), 'y=', (24, 3))	将第3组的聚合结果聚合
+(45, 9)
+>>>
+
+求平均值
+sumCount[0] / float(sumCount[1])
+
+
+如果是分2组呢？
+action1:											第2组5个数据的聚合
+('x=', (0, 0), 'y=', 5)
+(5, 1)
+action1:
+('x=', (5, 1), 'y=', 6)
+(11, 2)
+action1:
+('x=', (11, 2), 'y=', 7)
+(18, 3)
+action1:
+('x=', (18, 3), 'y=', 8)
+(26, 4)
+action1:
+('x=', (26, 4), 'y=', 9)
+(35, 5)
+
+
+action1:											第1组4个数据的聚合
+('x=', (0, 0), 'y=', 1)
+(1, 1)
+action1:
+('x=', (1, 1), 'y=', 2)
+(3, 2)
+action1:
+('x=', (3, 2), 'y=', 3)
+(6, 3)
+action1:
+('x=', (6, 3), 'y=', 4)
+(10, 4)
+
+
+action2:												2组数据的聚合
+('x=', (0, 0), 'y=', (10, 4))
+(10, 4)
+action2:
+('x=', (10, 4), 'y=', (35, 5))
+(45, 9)
+
+
+RDD.collect()			将整个 RDD 的内容返回
+>>> x=nums.collect()
+>>> x
+[1, 2, 3, 4, 5, 6, 7, 8, 9]
+
