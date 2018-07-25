@@ -278,3 +278,113 @@ RDD.collect()			将整个 RDD 的内容返回
 >>> x
 [1, 2, 3, 4, 5, 6, 7, 8, 9]
 
+
+take(n) 					返回 RDD 中的 n 个元素，并且尝试只访问尽量少的分区，因此该操作会得到一个不均衡的集合。
+top()							从 RDD 中获取前几个元素。
+takeSample(withReplacement, num, seed)			函数可以让我们从数据中获取一个采样，并指定是否替换。
+foreach()					对 RDD 中的所有元素应用一个行动操作，但是不把任何结果返回到驱动器程序中
+count()
+countByValue()
+>>> nums.countByValue()
+defaultdict(<type 'int'>, {1: 1, 2: 1, 3: 1, 4: 1, 5: 1, 6: 1, 7: 1, 8: 1, 9: 1})
+
+
+RDD持久化(缓存)			让某些过程得到的RDD常驻各个计算节点，而不是让每个动作都虫头计算
+RDD.persist()		前面提到过
+RDD.unpersist()
+
+
+以上已经是Spark的核心知识
+
+第4章　键值对操作
+pair RDD
+
+创建Pair RDD：
+>>> lines = sc.textFile("C:\\spark\\spark-1.6.0-bin-hadoop2.6\\README.md")
+>>> lines.count()
+95
+>>> pairs = lines.map(lambda x: (x.split(" ")[0], x))		#将由文本行组成的 RDD 转换为以每行的第一个单词为键的 pair RDD
+>>> pairs.count()
+95
+>>> pairs.first()
+(u'#', u'# Apache Spark')
+
+Pair RDD的转化操作
+reduceByKey(func)			合并具有相同键的值
+groupByKey()					对具有相同键的值进行分组
+combineByKey(createCombiner,mergeValue,mergeCombiners,partitioner)使用不同的返回类型合并具有相同键的值
+mapValues(func)				对pairRDD中的每个值应用一个函数而不改变键
+flatMapValues(func)		对pair RDD 中的每个值应用一个返回迭代器的函数，然后对返回的每个元素都生成一个对应原键的键值对记录。通常用于符号化
+keys()								返回一个仅包含键的RDD
+values()							返回一个仅包含值的RDD
+sortByKey()						返回一个根据键排序的RDD
+针对两个pair RDD的转化操作
+subtractByKey(other)	删掉 RDD 中键与 otherRDD 中的键相同的元素
+join(other)						对两个 RDD进行内连接
+rightOuterJoin				对两个 RDD进行连接操作，确保第一个 RDD 的键必须存在（右外连接）
+leftOuterJoin					对两个 RDD进行连接操作，确保第二个 RDD 的键必须存在（左外连接）
+cogroup								将两个 RDD中拥有相同键的数据分组到一起
+
+
+reduceByKey举例
+>>> x=[("panda", 0), ("pink", 3), ("pirate", 3), ("panda", 1), ("pink", 4)]
+>>> data=sc.parallelize(x)
+>>> data
+ParallelCollectionRDD[97] at parallelize at PythonRDD.scala:423
+>>> data.count()
+5
+>>> data.first()
+('panda', 0)
+>>>
+>>> data.mapValues(lambda x: (x, 1)).collect()				每个数据转换为(x, 1)
+[('panda', (0, 1)), ('pink', (3, 1)), ('pirate', (3, 1)), ('panda', (1, 1)), ('pink', (4, 1))]
+>>>
+>>> data.mapValues(lambda x: (x, 1)).reduceByKey(lambda x, y: (x[0] + y[0], x[1] + y[1])).collect()
+[('pink', (7, 2)), ('panda', (1, 2)), ('pirate', (3, 1))]
+
+
+统计字数
+>>> lines = sc.textFile("C:\\spark\\spark-1.6.0-bin-hadoop2.6\\README.md")
+>>> lines.count()
+95
+>>> words = lines.flatMap(lambda x: x.split(" "))
+>>> words.take(20)
+[u'#', u'Apache', u'Spark', u'', u'Spark', u'is', u'a', u'fast', u'and', u'general', u'cluster', u'computing', u'system', u'for'
+, u'Big', u'Data.', u'It', u'provides', u'high-level', u'APIs']
+>>> result = words.map(lambda x: (x, 1)).reduceByKey(lambda x, y: x + y)
+>>> result.collect()
+[(u'', 67), (u'when', 1), (u'R,', 1), (u'including', 3), (u'computation', 1), (u'using:', 1), (u'guidance', 2), (u'Scala,', 1),
+(u'environment', 1), (u'only', 1), (u'rich', 1), (u'Apache', 1), (u'sc.parallelize(range(1000)).count()', 1), (u'Building', 1),
+(u'guide,', 1), (u'return', 2), ............(u'documentation', 3), (u'It', 2), (u'graphs', 1), (u'./dev/run-tests', 1), (u'first',
+ 1), (u'latest', 1)]
+ 
+ 
+10.5　输入源
+
+
+10.6　24/7不间断运行
+要不间断运行 Spark Streaming 应用，需要一些特别的配置
+
+10.6.1　检查点机制
+检查点机制是我们在 Spark Streaming 中用来保障容错性的主要机制。它可以使 Spark Streaming 阶段性地把应用数据存储到诸如 HDFS 或
+Amazon S3 这样的可靠存储系统中，以供恢复时使用。检查点机制对于任何生产环境中的流计算应用都至关重要。
+
+你可以通过向 ssc.checkpoint() 方法传递一个路径参数（HDFS、S3 或者本地路径均可）来配置检查点机制，如
+ssc.checkpoint("hdfs://...")
+
+10.6.2　驱动器程序容错
+10.6.3　工作节点容错
+10.6.4　接收器容错
+10.6.5　处理保证
+
+
+10.7　Streaming用户界面
+
+
+第 11 章基于 MLlib 的机器学习
+
+
+
+	
+
+
