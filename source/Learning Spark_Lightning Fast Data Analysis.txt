@@ -359,6 +359,155 @@ ParallelCollectionRDD[97] at parallelize at PythonRDD.scala:423
  1), (u'latest', 1)]
  
  
+combineByKey()举例
+>>> nums=sc.parallelize([1,2,3,4,5,6,7,8,9],1)
+
+nums=[("coffee", 1), ("coffee", 2), ("panda", 3), ("coffee", 9)]
+nums=sc.parallelize(nums, 2)
+
+def action0(x):
+	print ("action0:")
+	print (x, (x,1))
+	return (x, 1)
+
+def action1(x,y):
+	print ("action1:")
+	print (x, y)
+	print ((x[0]+y, x[1]+1))
+	return (x[0]+y, x[1]+1)
+
+def action2(x,y):
+	print ("action2:")
+	print (x, y)
+	print ((x[0]+y[0], x[1]+y[1]))
+	return (x[0]+y[0], x[1]+y[1])
+
+
+>>> sumCount = nums.combineByKey(action0,action1,action2)		#前三个参数是三个函数，第一个函数是处理的数据的key第一次出线时要做的动作。第二个函数是处理的数据的key已经出现过的情况，第三个函数是在计算节点之间进行merge的动作。
+>>>
+>>> sumCount.count()
+action0:
+(3, (3, 1))
+action0:
+(9, (9, 1))
+action0:
+(1, (1, 1))
+action1:
+((1, 1), 2)
+(3, 2)
+action2:
+((3, 2), (9, 1))
+(12, 3)
+2
+>>>
+
+
+
+第 10 章　Spark Streaming
+
+
+Spark Streaming用于处理流式数据
+
+内部的实现方式是将流数据切割成固定时间间隔的RDD
+
+处理流数据，要使用StreamingContext()创建对象，这个对象接收各类来源的数据，生成DStream
+DStream 是随时间推移而收到的数据的序列。在内部，每个时间区间收到的数据都作为RDD 存在，而 DStream 是由这些 RDD 所组成的序列。
+
+
+Spark Streaming会在底层创建出 SparkContext，进行每个RDD的数据处理，这些是程序员不直接可见的。在程序员的视角，需要
+1.创建StreamingContext对象
+2.该对象从指定的数据源创建DStream
+3.指定DStream要做的各种传化操作和输出操作
+4.StreamingContext对象调用start()启动处理
+5.StreamingContext对象调用awaitTermination()等待任务完成（对有些流数据处理，会一直处理下去，不会停止）
+
+
+10.3　转化操作
+DStream 的转化操作可以分为无状态（stateless）和有状态（stateful）两种。
+区别在于数据处理时是否依赖之前数据的计算结果
+
+10.3.1　无状态转化操作
+无状态转化操作就是把简单的 RDD 转化操作应用到每个批次上，也就是转化 DStream 中的每一个 RDD。
+主要有
+map()
+flatMap()					对 DStream 中的每个元素应用给定函数，返回由各元素输出的迭代器组成的DStream。
+filter()
+repartition()			改变 DStream 的分区数。
+reduceByKey()			将每个批次中键相同的记录归约。
+groupByKey()			将每个批次中的记录根据键分组。
+
+这些无状态转化操作是分别应用到DStream内部的每个RDD上的
+
+无状态转化操作也能在多个 DStream 间整合数据，不过也是在各个时间区间内。DStream1和DStream2中有相同数据段的RDD可以跨DStream整合数据
+cogroup()、join()、leftOuterJoin()
+
+如果以上的操作无法满足要求，DStream 还提供了一个叫作transform() 的高级操作符，可以让你直接操作其内部的 RDD。这个
+transform() 操作允许你对 DStream 提供任意一个 RDD 到 RDD 的函数。
+这个函数会在数据流中的每个批次中被调用，生成一个新的流。transform() 的一个常见应用就是重用你为 RDD 写的批处理代码。
+
+
+10.3.2　有状态转化操作
+
+DStream 的有状态转化操作是跨时间区间跟踪数据的操作；也就是说，一些先前批次的数据也被用来在新的批次中计算结果。
+主要的两种类型是滑动窗口和 updateStateByKey()，前者以一个时间阶段为滑动窗口进行操作，后者则用来跟踪每个键的状
+态变化（例如构建一个代表用户会话的对象）。
+
+基于窗口的转化操作
+基于窗口的操作会在一个比 StreamingContext 的批次间隔更长的时间范
+围内，通过整合多个批次的结果，计算出整个窗口的结果。
+
+两个参数，分别为窗口时长以及滑动步长
+
+比如某DStream中有10秒为单位的RDD数据序列
+-  -  -  -  0  1  2  3  4  5  6  7  8
+如果窗口为30秒，滑动步长是20秒
+那么初始态是
+-  -  -  -  0  1  2  3  4  5  6  7  8
+   |窗口 |
+窗口第1批数据----滑动20秒，取30秒，窗口中只有20秒的数据（0，1）
+-  -  -  -  0  1  2  3  4  5  6  7  8
+		     |窗口 |
+窗口第2批数据----滑动20秒，取30秒，窗口中有30秒的数据（1，2，3）
+-  -  -  -  0  1  2  3  4  5  6  7  8
+		           |窗口 |
+窗口第3批数据----滑动20秒，取30秒，窗口中有30秒的数据（3，4，5）
+-  -  -  -  0  1  2  3  4  5  6  7  8
+		                 |窗口 |
+
+确定窗口时长以及滑动步长以后，就可以开始处理了。
+
+对DStream可以用的最简单窗口操作是 window()，它返回一个新的DStream来表示所请求的窗口操作的结果数据。
+换句话说，window()生成的 DStream 中的每个 RDD 会包含多个批次中的数据，可以对这些数据进行 count()、transform() 等操作
+
+既然是窗口操作，那么每一次进行滑窗就会有老的数据离开，新的数据加入。那么对很多操作。没必要重新计算窗口内的全部数据。
+只需要消除掉老数据，增加新数据既可。
+
+reduceByWindow()
+reduceByKeyAndWindow()
+countByWindow()
+countByValueAndWindow()
+updateStateByKey()				跨批次维护状态（例如跟踪用户访问网站的会话）
+
+
+reduceByWindow() 和 reduceByKeyAndWindow() 让我们可以对每个窗口更高效地进行归约操作。
+它们接收一个归约函数，在整个窗口上执行，比如 +。除此以外，它们还有一种特殊形式，通过只考虑新进
+入窗口的数据和离开窗口的数据，让 Spark 增量计算归约结果。这种特殊形式需要提供归约函数的一个逆函数，
+比如 + 对应的逆函数为 -。对于较大的窗口，提供逆函数可以大大提高执行效率。
+简单说就是这两个函数要提供如何处理新增数据的函数，也要提供如何处理旧数据的函数。
+
+countByWindow() 和countByValueAndWindow() 作为对数据进行计数操作的简写。
+
+updateStateByKey()跨批次维护状态。它的参数是一个update(events,oldState) 函数，接收与某键相关的事件以及该键之前对应的状态，返回这个键对应的新状态。
+
+
+10.4　输出操作
+
+print()			常用的一种调试性输出操作，它会在每个批次中抓取DStream 的前十个元素打印出来。
+saveAsTextFiles("outputDir", "txt")			每个批次的结果被保存在给定目录的子目录中，且文件名中含有时间和后缀名。
+saveAsHadoopFiles()
+foreachRDD()		通用的输出操作，对DStream 中的 RDD 运行任意计算。对其中的RDD，可以继续使用eachPartition()遍历每一条数据，并完成具体的操作。如存入MySql
+
+
 10.5　输入源
 
 
