@@ -401,6 +401,162 @@ action2:
 2
 >>>
 
+>>> sumCount.collect()
+action2:
+((3, 2), (9, 1))
+(12, 3)
+[('coffee', (12, 3)), ('panda', (3, 1))]
+>>>
+
+>>>sumCount.map(lambda data: (data[0], data[1][0]/data[1][1])).collectAsMap()					lambda与书上的不一样，书上的提示错误，应该是我的这个才对
+{'coffee': 4, 'panda': 3}						#平均值
+
+
+4.3.2　数据分组
+groupByKey() 会使用 RDD中的键来对数据进行分组。
+>>> nums=sc.parallelize({(1, 2), (3, 4), (3,6)})
+>>> nums.groupByKey().collect()
+[(1, <pyspark.resultiterable.ResultIterable object at 0x0527F790>), (3, <pyspark.resultiterable.ResultIterable object at 0x0527F
+6D0>)]
+>>> x=nums.groupByKey().collect()
+>>> x[1][1].data
+[4, 6]
+>>>
+
+
+
+4.3.3　连接
+将有键的数据与另一组有键的数据一起使用是对键值对数据执行的最有用的操作之一
+连接方式多种多样：右外连接、左外连接、交叉连接以及内连接。
+
+内连接---只保留共有key的部分
+>>> rdd1=sc.parallelize({("coffee", 1), ("coffee", 2), ("panda", 3)})
+>>> rdd2=sc.parallelize({("coffee", 9), ("panda", 3), ("pirate", 5)})
+>>> rdd1.collect()
+[('coffee', 2), ('coffee', 1), ('panda', 3)]
+>>> rdd2.collect()
+[('pirate', 5), ('coffee', 9), ('panda', 3)]
+>>> rdd3=rdd1.join(rdd2)
+>>> rdd3.collect()
+[('coffee', (2, 9)), ('coffee', (1, 9)), ('panda', (3, 3))]
+>>>
+
+如果不想像内连接那样只保留共有key的项，就需要使用leftOuterJoin(other)和rightOuterJoin(other)
+>>> rdd1=sc.parallelize({("coffee", 1), ("coffee", 2), ("panda", 3), ("tiger", 7)})
+>>> rdd2=sc.parallelize({("coffee", 9), ("panda", 3), ("pirate", 5)})
+>>> rdd1.collect()
+[('coffee', 2), ('coffee', 1), ('tiger', 7), ('panda', 3)]
+>>> rdd2.collect()
+[('pirate', 5), ('coffee', 9), ('panda', 3)]
+>>> rdd3=rdd1.leftOuterJoin(rdd2)
+>>> rdd3.collect()
+[('tiger', (7, None)), ('coffee', (2, 9)), ('coffee', (1, 9)), ('panda', (3, 3))]
+>>> rdd4=rdd1.rightOuterJoin(rdd2)
+>>> rdd4.collect()
+[('coffee', (2, 9)), ('coffee', (1, 9)), ('panda', (3, 3)), ('pirate', (None, 5))]
+>>>
+
+4.3.4　数据排序
+sortByKey()				可以升序降序，也可以指定比较函数
+
+>>> rdd1.collect()
+[('coffee', 2), ('coffee', 1), ('tiger', 7), ('panda', 3)]
+>>> rdd3=rdd1.sortByKey(ascending=True, numPartitions=None, keyfunc = lambda x:str(x))
+>>> rdd3.collect()
+[('coffee', 2), ('coffee', 1), ('panda', 3), ('tiger', 7)]
+>>>
+
+Pair RDD的行动操作
+countByKey()												对每个键对应的元素分别计数
+collectAsMap()											将结果以映射表的形式返回，以便查询
+lookup(key)													返回给定键对应的所有值
+
+
+Map{(1, 2),(3, 4), (3,6)}
+
+
+数据分区
+Python-Spark中对数据的分区比Scala简单。只要指定要分多少个区既可。内部对自动的使用hash等方式分区。如果要改变hash函数，也可以指定
+import urlparse
+def hash_domain(url):
+	return hash(urlparse.urlparse(url).netloc)
+RDD.partitionBy(20,hash_domain)
+
+
+第 9 章　Spark SQL
+
+
+9.2.1　初始化Spark SQL			这里都假设未引入hive依赖
+
+from pyspark.sql import SQLContext, Row
+sqlCtx = SQLContext(sc)				#在 Python 中创建 SQL 上下文环境
+
+9.2.2　基本查询示例
+input = sqlCtx.read.json("D:\\MyLearning\\Spark\\testweet.json")			#在spark1.3以后，input是pyspark.sql.dataframe.DataFrame类型的
+					
+# 注册输入的SchemaRDD
+input.registerTempTable("tweets")			#把这些数据注册为一张临时表并赋予该表一个名字
+
+input.count()
+
+依据retweetCount（转发计数）选出推文
+input.select("text","retweetCount").filter("retweetCount=0").show()
+或者
+input.select(input.text,input.retweetCount).filter(input.retweetCount==0).show()
+或者
+sqlCtx.sql("select text,retweetCount from tweets where retweetCount=0").show()
+
+使用Row对象
+topTweets = sqlCtx.sql("select text,retweetCount from tweets where retweetCount=0")			topTweets是DataFrame
+topTweets.take(1)
+	[Row(text=u'Adventures With Coffee, Code, and Writing.', retweetCount=0)]
+
+topTweetText = topTweets.map(lambda row: row.text)												topTweetText是RDD						
+topTweetText2 = topTweets.map(lambda row: (row.text, row.retweetCount))
+
+9.2.4　缓存
+
+9.3　读取和存储数据
+	9.3.1　Apache Hive
+	9.3.2　Parquet
+	9.3.3　JSON
+	9.3.4　基于RDD			除了读取数据，也可以基于RDD创建DataFrame
+		happyPeopleRDD = sc.parallelize([Row(name="holden", favouriteBeverage="coffee")])
+		happyPeopleSchemaRDD = sqlCtx.inferSchema(happyPeopleRDD)
+		happyPeopleSchemaRDD.registerTempTable("happy_people")
+
+
+9.4　JDBC/ODBC服务器
+	Spark SQL 也提供 JDBC 连接支持，这对于让商业智能（BI）工具连接到 Spark 集群上以及在多用户间共享一个集群的场景都非常有用。
+		我理解，JDBC(Java Database Connectivity)是系统对外可以提供的Java风格的数据库接口。Spark SQL对外
+		提供了符合JDBC标准的接口，这让使用JDBC的程序可以无感知的使用Spart集群中的数据。
+		
+	Beeline是Hive新的命令行客户端工具。是基于SQLLine CLI的JDBC客户端。
+	用Beeline访问Spark SQL提供的JDBC服务器
+	
+	
+	用Beeline或其他访问JDBC的客户端访问Spark SQL JDBC服务器前，要先启动Spark SQL JDBC服务器
+		./sbin/start-thriftserver.sh --master sparkMaster
+	然后使用Beeline访问
+		./bin/beeline -u jdbc:hive2://localhost:10000
+	
+
+9.5　用户自定义函数
+用户自定义函数，也叫 UDF，可以让我们使用 Python/Java/Scala 注册自
+定义函数，并在 SQL 中调用。这种方法很常用，通常用来给机构内的
+SQL 用户们提供高级功能支持，这样这些用户就可以直接调用注册的函
+数而无需自己去通过编程来实现了。
+
+def myFoo(x):
+	print ("myFoo")
+	print (x)
+	return len(x)
+
+sqlCtx.registerFunction("strLenPython", lambda x: len(x))
+sqlCtx.registerFunction("strLenPython", myFoo)
+lengthSchemaRDD = sqlCtx.sql("SELECT strLenPython('textxxx') FROM tweets LIMIT 10")
+lengthSchemaRDD.show()
+
 
 
 第 10 章　Spark Streaming
