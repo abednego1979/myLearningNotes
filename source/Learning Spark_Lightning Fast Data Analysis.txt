@@ -483,6 +483,153 @@ def hash_domain(url):
 RDD.partitionBy(20,hash_domain)
 
 
+第 5 章　数据读取与保存
+当数据太大，保存在多台计算机上，就需要考虑数据读取与保存问题了
+
+三种常见的数据源
+1.文件格式与文件系统
+2.Spark SQL中的结构化数据源
+3.数据库与键值存储
+
+
+读取文本文件
+读单个文件：input = sc.textFile("C:\\spark\\spark-1.6.0-bin-hadoop2.6\\README.md")
+读多个文件：input = sc.wholeTextFiles("D:\\README.md,D:\\README2.md")								得到的是pairRDD，键值是文件名
+保存文本文件：result.saveAsTextFile(outputFile)
+
+读取JSON
+import json
+data = input.map(lambda x: json.loads(x))
+保存JSON
+假设我们要选出喜爱熊猫的人
+data.filter(lambda x: x["lovesPandas"]).map(lambda x: json.dumps(x)).saveAsTextFile(outputFile)
+
+读取CSV
+import csv
+import StringIO
+def loadRecord(line):
+	"""解析一行CSV记录"""
+	input = StringIO.StringIO(line)
+	reader = csv.DictReader(input, fieldnames=["name", "favouriteAnimal"])
+	return reader.next()
+input = sc.textFile(inputFile).map(loadRecord)
+
+def loadRecords(fileNameContents):
+	"""读取给定文件中的所有记录"""
+	input = StringIO.StringIO(fileNameContents[1])
+	reader = csv.DictReader(input, fieldnames=["name", "favoriteAnimal"])
+	return reader
+fullFileData = sc.wholeTextFiles(inputFile).flatMap(loadRecords)
+
+
+保存CSV
+def writeRecords(records):
+	"""写出一些CSV记录"""
+	output = StringIO.StringIO()
+	writer = csv.DictWriter(output, fieldnames=["name", "favoriteAnimal"])
+	for record in records:
+		writer.writerow(record)
+	return [output.getvalue()]
+pandaLovers.mapPartitions(writeRecords).saveAsTextFile(outputFile)
+
+
+
+SequenceFile 是由没有相对关系结构的键值对文件组成的常用 Hadoop格式。SequenceFile 也是 Hadoop MapReduce作业中常用的输入输出格式
+读取SequenceFile
+data = sc.sequenceFile(inFile,"org.apache.hadoop.io.Text", "org.apache.hadoop.io.IntWritable")
+保存SequenceFile
+data = sc.parallelize(list([("Panda", 3), ("Kay", 6), ("Snail", 2)]))
+data.saveAsSequenceFile("D:\\xxx")
+
+
+
+对象文件
+对象文件看起来就像是对 SequenceFile 的简单封装，它允许存储只包含值的 RDD。和 SequenceFile 不一样的是，对象文件是使用 Java 序列化写出的。
+对象文件的数据对应java的类，如果类有调整，那原对象文件就不可使用了。
+对象文件在 Python 中无法使用
+
+
+Hadoop输入输出格式
+Python不支持？
+
+
+文件压缩
+略
+
+文件系统
+本地/“常规”文件系统
+Spark 支持从本地文件系统中读取文件，不过它要求文件在集群中所有节点的相同路径下都可以找到。
+如果网络文件系统将某个网络上的文件映射到各个计算节点的同一个路径位置，那么Spark可以当作本地文件处理
+
+
+Amazon S3
+略
+
+HDFS----Hadoop 分布式文件系统
+在 Spark 中使用 HDFS 只需要将输入输出路径指定为hdfs://master:port/path
+
+
+Spark SQL中的结构化数据
+把一条 SQL 查询给 Spark SQL，让它对一个数据源执行查询（选出一些字段或者对字段使用一些函数），然后得到由 Row对象组成的 RDD，每个 Row 对象表示一条记录。
+用Spark SQL操作Apache Hive
+from pyspark.sql import HiveContext
+hiveCtx = HiveContext(sc)			#HiveContext对象，也就是Spark SQL的入口
+rows = hiveCtx.sql("SELECT name, age FROM users")
+firstRow = rows.first()
+print firstRow.name
+
+用Spark SQL操作JSON
+
+假设有文件d:\tweets.json，内容是
+{"user": {"name": "Holden", "location": "San Francisco"}, "text": "Nice day out today"}
+{"user": {"name": "Matei", "location": "Berkeley"}, "text": "Even nicer here :)"}
+
+代码
+from pyspark.sql import HiveContext
+hiveCtx = HiveContext(sc)
+tweets = hiveCtx.jsonFile("d:\\tweets.json")
+tweets.registerTempTable("tweets")
+results = hiveCtx.sql("SELECT user.name,text FROM tweets")
+
+
+
+7.3　使用spark-submit部署应用
+Spark 为各种集群管理器提供了统一的工具来提交作业，这个工具是 spark-submit。
+提交 Python 应用的例子
+========================================
+bin/spark-submit my_script.py
+
+
+如果在调用 spark-submit 时除了脚本或 JAR 包的名字之外没有别的
+参数，那么这个 Spark 程序只会在本地执行。当我们希望将应用提交到
+Spark 独立集群上的时候，可以将独立集群的地址和希望启动的每个执
+行器进程的大小作为附加标记提供，如：
+========================================
+bin/spark-submit --master spark://host:7077 --executor-memory 10g my_script.py
+
+--master
+spark://host:port
+mesos://host:port
+local				运行本地模式，使用单核
+local[N]		运行本地模式，使用 N 个核心
+local[*]		运行本地模式，使用尽可能多的核心
+
+7.5　Spark应用内与应用间调度
+处理多个用户在同一个共享集群上各自提交作业的情况。
+
+
+7.6　集群管理器
+
+7.6.1　独立集群管理器
+			如何构建Spark集群
+7.6.2　Hadoop YARN
+7.6.3　Apache Mesos
+7.6.4　Amazon EC2
+
+
+第 8 章　Spark 调优与调试
+
+
 第 9 章　Spark SQL
 
 
